@@ -156,8 +156,13 @@ workflow reassignmentWorkflow {
 
     touchedFastas = splitTouchedGroupFastas(newGroupFile, touchedGroups, file(params.fullProteome))
 
+    // Same determinism concern as centroidRecompute.nf's batching -- sort
+    // by filename before collating so a later -resume doesn't reshuffle
+    // batch composition and turn cache hits into misses.
+    sortedTouchedFastas = touchedFastas.flatten().toSortedList { a, b -> a.name <=> b.name }.flatMap { it }
+
     touchedResults = computeTouchedGroupCentroids(
-        touchedFastas.flatten().collate(50),
+        sortedTouchedFastas.collate(50),
         file("${projectDir}/bin/approx_centroid.py"),
         params.exactCentroidLimit, params.centroidDiamondArgs)
 

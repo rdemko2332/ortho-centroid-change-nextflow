@@ -60,12 +60,21 @@ workflow centroidRecomputeWorkflow {
         coreGroupFastas.collate(classifyBatchSize),
         params.exactCentroidLimit)
 
+    // classifyGroupsForRecompute runs as many parallel tasks; their
+    // completion order (and so the order their output files arrive here)
+    // varies run to run on a busy cluster. Sort by filename before
+    // re-batching so batch composition is deterministic -- otherwise a
+    // later -resume can reshuffle which groups land in which batch, turning
+    // a cache hit into a cache miss for no real reason.
+    sortedExact = exactFastas.flatten().toSortedList { a, b -> a.name <=> b.name }.flatMap { it }
+    sortedLarge = largeFastas.flatten().toSortedList { a, b -> a.name <=> b.name }.flatMap { it }
+
     // Both buckets batched to their own size, then mixed into one channel so
     // computeGroupCentroids is only called (DSL2 "process already used" --
     // each process can only be invoked once per workflow scope) once, while
     // still preserving a different batch size per bucket.
-    allBatches = exactFastas.flatten().collate(exactBatchSize)
-        .mix(largeFastas.flatten().collate(largeBatchSize))
+    allBatches = sortedExact.collate(exactBatchSize)
+        .mix(sortedLarge.collate(largeBatchSize))
 
     results = computeGroupCentroids(
         allBatches, approxCentroidScript, params.exactCentroidLimit, params.centroidDiamondArgs)
