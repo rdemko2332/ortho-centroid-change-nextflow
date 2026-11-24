@@ -136,11 +136,17 @@ workflow reassignmentWorkflow {
   main:
     flagged = extractFlaggedFasta(flaggedProteins, file(params.fullProteome))
 
+    // Same collectFile-merge-order concern as centroidRecompute.nf/
+    // distanceToCentroid.nf: sort actual line content before merging so
+    // this stays a stable cache input for compareExponentsAndDecideReassignment.
     flaggedHits = globalFlaggedSearchDiamond(
         flagged.splitFasta(by: 1000, file: true),
         newBestRepsFullFasta.collect(),
         params.globalSearchEvalue,
         params.distanceDiamondOutputFields)
+        .splitText()
+        .toSortedList()
+        .flatMap { it }
         .collectFile(name: 'flaggedHits.tsv', storeDir: params.outputDir)
 
     reassignments = compareExponentsAndDecideReassignment(
@@ -167,6 +173,9 @@ workflow reassignmentWorkflow {
         params.exactCentroidLimit, params.centroidDiamondArgs)
 
     touchedCentroidsTsv = touchedResults.tsv
+        .splitText()
+        .toSortedList()
+        .flatMap { it }
         .collectFile(name: 'touchedCentroids.tsv', storeDir: params.outputDir)
 
     touchedBestReps = touchedCentroidsTsv

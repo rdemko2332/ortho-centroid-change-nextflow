@@ -79,12 +79,24 @@ workflow centroidRecomputeWorkflow {
     results = computeGroupCentroids(
         allBatches, approxCentroidScript, params.exactCentroidLimit, params.centroidDiamondArgs)
 
+    // Same determinism concern as the batching above, one level further
+    // downstream: collectFile() concatenates each batch's output in
+    // whatever order they happen to arrive, which isn't guaranteed stable
+    // across runs even when batch composition is. Sorting the actual lines
+    // (not just the source file list) pins the merged file's byte content
+    // down to the group set alone, so anything reading it as a task input
+    // (touchedGroups/freshBestReps below, and centroidsTsv itself, emitted
+    // for buildCentroidComparisonReport later) gets a stable cache key.
     centroidsTsv = results.tsv
-        .collectFile(name: 'centroids.tsv',
-                     keepHeader: false,
-                     storeDir: params.outputDir)
+        .splitText()
+        .toSortedList()
+        .flatMap { it }
+        .collectFile(name: 'centroids.tsv', storeDir: params.outputDir)
 
     newCentroidsFasta = results.fasta
+        .splitText(by: 2)
+        .toSortedList()
+        .flatMap { it }
         .collectFile(name: 'newCentroids.fasta', storeDir: params.outputDir)
 
     touchedGroups = centroidsTsv

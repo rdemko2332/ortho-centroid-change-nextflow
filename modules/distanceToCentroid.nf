@@ -118,7 +118,14 @@ workflow distanceToCentroidWorkflow {
     batchDistances = filterDistanceToOwnCentroidHits(
         batchHits, seqToGroup.collect(), merged.txt.collect())
 
-    newDistances = batchDistances.collectFile(name: 'newDistances.tsv', storeDir: params.outputDir)
+    // Same collectFile-merge-order concern as centroidRecompute.nf: sort
+    // actual line content, not just rely on arrival order, so this stays a
+    // stable cache input for calculateNewCentroidDistanceStats/flagProteinsByDistance.
+    newDistances = batchDistances
+        .splitText()
+        .toSortedList()
+        .flatMap { it }
+        .collectFile(name: 'newDistances.tsv', storeDir: params.outputDir)
 
     // Old distance-to-(then-current)-centroid data already exists -- it's
     // exactly what intraGroupBlastFile.tsv/intraResidualGroupBlastFile.tsv
